@@ -1,0 +1,8 @@
+{
+  "status_inbox": "Eingang",
+  "status_preparation": "Vorbereitung",
+  "status_friday": "Freitagsagenda",
+  "status_decided": "Beschlossen",
+  "status_todo": "ToDo laeuft",
+  "status_done": "Erledigt"
+}

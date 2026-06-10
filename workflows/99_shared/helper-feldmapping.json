@@ -1,0 +1,8 @@
+{
+  "mail_to_card": {
+    "subject": "title",
+    "from": "submitter",
+    "received_at": "received_date",
+    "body": "description"
+  }
+}
