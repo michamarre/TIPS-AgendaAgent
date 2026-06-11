@@ -1,1 +1,127 @@
-{}
+{
+  "name": "workflow-erinnerungen-vorbereitung",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 240],
+      "parameters": {}
+    },
+    {
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 420],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set-config",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 330],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst today = now.toISOString().slice(0, 10);\nreturn [{\n  json: {\n    board_id: Number($env.NEXTCLOUD_DECK_BOARD_ID || 1919),\n    stack_ids: {\n      rueckfrage: 5681,\n      vorbereitung: 5684,\n      freitagsagenda: 5687,\n      todo_laeuft: 5693\n    },\n    label_ids: {\n      review: 7898,\n      action_required: 7901,\n      information: 7907,\n      diskussion: 7910,\n      beschluss: 7913,\n      sonstiges: 7916\n    },\n    today,\n    generated_at: now.toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "read-board-stacks",
+      "name": "Read Board Stacks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [760, 330],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $node['Set Config'].json.board_id + '/stacks' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "normalize-reminder-candidates",
+      "name": "Normalize Reminder Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 330],
+      "parameters": {
+        "jsCode": "const cfg = $('Set Config').first().json;\nconst stacks = $input.all().map((item) => item.json || {});\nconst relevantStackIds = new Set([\n  cfg.stack_ids.rueckfrage,\n  cfg.stack_ids.vorbereitung,\n  cfg.stack_ids.freitagsagenda,\n  cfg.stack_ids.todo_laeuft,\n]);\nfunction parseDateOnly(value) {\n  const text = String(value || '').trim();\n  if (!text) return '';\n  const match = text.match(/\\d{4}-\\d{2}-\\d{2}/);\n  return match ? match[0] : '';\n}\nfunction extractField(description, fieldName) {\n  const regex = new RegExp('^' + fieldName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\s*:\\\\s*(.*)$', 'mi');\n  const match = String(description || '').match(regex);\n  return match ? String(match[1] || '').trim() : '';\n}\nfunction parseTodos(description) {\n  const lines = String(description || '').split(/\\r?\\n/);\n  const todos = [];\n  let current = null;\n  let inTodoBlock = false;\n  for (const rawLine of lines) {\n    const line = rawLine.trimEnd();\n    const trimmed = line.trim();\n    if (!trimmed && inTodoBlock) continue;\n    if (trimmed === 'ToDos') {\n      inTodoBlock = true;\n      continue;\n    }\n    if (!inTodoBlock) continue;\n    const startMatch = trimmed.match(/^\\d+\\.\\s+Aufgabe:\\s*(.+)$/i);\n    if (startMatch) {\n      if (current) todos.push(current);\n      current = { summary: String(startMatch[1] || '').trim(), owner: '', due_date: '', status: '' };\n      continue;\n    }\n    if (!current) {\n      if (/^(Technik|Sitzungsnotiz)\\s*$/i.test(trimmed)) break;\n      continue;\n    }\n    const ownerMatch = trimmed.match(/^Verantwortlich:\\s*(.+)$/i);\n    if (ownerMatch) {\n      current.owner = String(ownerMatch[1] || '').trim();\n      continue;\n    }\n    const dueMatch = trimmed.match(/^Frist:\\s*(.+)$/i);\n    if (dueMatch) {\n      current.due_date = parseDateOnly(dueMatch[1]);\n      continue;\n    }\n    const statusMatch = trimmed.match(/^Status:\\s*(.+)$/i);\n    if (statusMatch) {\n      current.status = String(statusMatch[1] || '').trim().toLowerCase();\n      continue;\n    }\n    if (/^(Technik|Sitzungsnotiz)\\s*$/i.test(trimmed)) break;\n  }\n  if (current) todos.push(current);\n  return todos;\n}\nfunction daysDiff(fromDate, toDate) {\n  const a = new Date(fromDate + 'T00:00:00Z');\n  const b = new Date(toDate + 'T00:00:00Z');\n  return Math.round((b - a) / 86400000);\n}\nconst candidates = [];\nfor (const stack of stacks) {\n  const stackId = Number(stack.id || 0);\n  if (!relevantStackIds.has(stackId)) continue;\n  const cards = Array.isArray(stack.cards) ? stack.cards : [];\n  for (const card of cards) {\n    const description = String(card.description || '');\n    const followupDate = parseDateOnly(extractField(description, 'Wiedervorlage/Frist'));\n    const todos = parseTodos(description);\n    const openTodosDue = todos.filter((todo) => {\n      const status = String(todo.status || '').trim();\n      return todo.due_date && status !== 'erledigt' && todo.due_date <= cfg.today;\n    });\n    const dueReasons = [];\n    if (followupDate && followupDate <= cfg.today) {\n      dueReasons.push({ type: 'wiedervorlage', due_date: followupDate, overdue_days: daysDiff(followupDate, cfg.today) });\n    }\n    for (const todo of openTodosDue) {\n      dueReasons.push({\n        type: 'todo',\n        due_date: todo.due_date,\n        overdue_days: daysDiff(todo.due_date, cfg.today),\n        todo_summary: todo.summary,\n        todo_owner: todo.owner,\n        todo_status: todo.status || 'offen'\n      });\n    }\n    if (!dueReasons.length) continue;\n    const labels = Array.isArray(card.labels) ? card.labels : [];\n    const categoryLabel = labels.find((label) => [cfg.label_ids.information, cfg.label_ids.diskussion, cfg.label_ids.beschluss, cfg.label_ids.sonstiges].includes(Number(label.id || 0)));\n    candidates.push({\n      card_id: Number(card.id || 0),\n      title: String(card.title || '').trim() || 'Ohne Titel',\n      stack_id: stackId,\n      stack_title: String(stack.title || '').trim(),\n      category: categoryLabel ? String(categoryLabel.title || '').trim() : extractField(description, 'Kategorie') || 'Sonstiges',\n      submitter: extractField(description, 'Einreicher') || 'unbekannt',\n      preparation: extractField(description, 'Vorbereitung'),\n      followup_date: followupDate,\n      labels: labels.map((label) => ({ id: Number(label.id || 0), title: String(label.title || '').trim() })),\n      due_reasons: dueReasons,\n      todos,\n      description\n    });\n  }\n}\nreturn [{ json: { generated_at: cfg.generated_at, today: cfg.today, due_count: candidates.length, candidates } }];"
+      }
+    },
+    {
+      "id": "build-reminder-markdown",
+      "name": "Build Reminder Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 330],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json || {};\nconst candidates = Array.isArray(payload.candidates) ? payload.candidates : [];\nif (!candidates.length) {\n  return [{\n    json: {\n      result: 'no_due_items',\n      generated_at: payload.generated_at,\n      reminder_markdown: [\n        '# AgendaFlow Reminder',\n        '',\n        `Stand: ${payload.generated_at || new Date().toISOString()}`,\n        '',\n        'Keine faelligen Wiedervorlagen oder ToDo-Fristen gefunden.'\n      ].join('\\n')\n    }\n  }];\n}\nconst lines = [\n  '# AgendaFlow Reminder',\n  '',\n  `Stand: ${payload.generated_at || new Date().toISOString()}`,\n  `Faellige Karten: ${candidates.length}`,\n  ''\n];\ncandidates.forEach((item, index) => {\n  lines.push(`${index + 1}. ${item.title}`);\n  lines.push(`   Stack: ${item.stack_title}`);\n  lines.push(`   Kategorie: ${item.category}`);\n  lines.push(`   Einreicher: ${item.submitter}`);\n  if (item.followup_date) {\n    lines.push(`   Wiedervorlage/Frist: ${item.followup_date}`);\n  }\n  if (item.preparation) {\n    lines.push(`   Vorbereitung: ${item.preparation}`);\n  }\n  item.due_reasons.forEach((reason) => {\n    if (reason.type === 'wiedervorlage') {\n      lines.push(`   Remindergrund: Wiedervorlage faellig seit ${reason.due_date} (${reason.overdue_days} Tage)`);\n    } else {\n      lines.push(`   Remindergrund: ToDo \\\"${reason.todo_summary}\\\" faellig seit ${reason.due_date} (${reason.overdue_days} Tage)`);\n      if (reason.todo_owner) {\n        lines.push(`   Verantwortlich: ${reason.todo_owner}`);\n      }\n    }\n  });\n  lines.push(`   Deck-Card-ID: ${item.card_id}`);\n  lines.push('');\n});\nreturn [{\n  json: {\n    result: 'due_items_found',\n    generated_at: payload.generated_at,\n    due_count: candidates.length,\n    candidates,\n    reminder_markdown: lines.join('\\n')\n  }\n}];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Schedule Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Set Config": {
+      "main": [[{ "node": "Read Board Stacks", "type": "main", "index": 0 }]]
+    },
+    "Read Board Stacks": {
+      "main": [[{ "node": "Normalize Reminder Candidates", "type": "main", "index": 0 }]]
+    },
+    "Normalize Reminder Candidates": {
+      "main": [[{ "node": "Build Reminder Markdown", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Berlin",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "p4-04-reminder-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

@@ -3,3 +3,29 @@
 ## 2026-06-10
 - Initiale Projektsteuerung fuer TIPS AgendaFlow aus dem Musterprojekt `email-sync-agent` uebernommen und fachlich angepasst.
 - `AGENTS.md`, Projektlogs, Konfigurationsdateien, Templates und Workflow-Struktur angelegt.
+- Bekannten Hetzner-Status der separaten `agenda-n8n`-Instanz als nachvollziehbare Betriebsnotiz dokumentiert.
+- Phase-1-Tasks auf den realen Infrastrukturstand umgestellt: zuerst `agenda-n8n` validieren, dann Nextcloud/Deck und Mailbox iterativ klaeren.
+- Proxy-/Pfadkonfiguration fuer `agenda-n8n` unter `/agenda-n8n/rest/*` auf dem VPS korrigiert und oeffentliche REST-/Login-/Webhook-Testpfade erfolgreich revalidiert.
+- `agenda-n8n` technisch gebootstrapped: Owner-Setup abgeschlossen, Public-API-Key erzeugt, API- und Webhook-Basen dokumentiert und lokale Konfiguration auf die neue Instanz umgestellt.
+- Sciebo-/Deck-Zugriff fuer Board `1919` erfolgreich validiert; Board- und Stack-Lesen funktionieren, Karten-Endpunkte reagieren in dieser Umgebung jedoch noch mit `405` und wurden als Folgepunkt dokumentiert.
+- Deck-Kartenpfad fuer Board `1919` erfolgreich verifiziert: Testkarte angelegt, per Card-ID gelesen und wieder geloescht; Collection-GET bleibt in dieser Sciebo-Instanz `405`.
+- MVP-Eingangskanal auf Outlook-Ordner `__Agenda` umgestellt: persoenliches Postfach plus Outlook-Regel statt nicht vorhandenem separaten Agenda-Postfach.
+- `__Agenda` ist jetzt real angelegt; der naechste technische Folgepunkt ist der Graph-Zugriff auf genau diesen Outlook-Ordner.
+- Microsoft Graph Zugriff auf den Outlook-Ordner `__Agenda` erfolgreich validiert; Ordner-ID und Beispielmail dokumentiert.
+- MVP-Statusmodell fuer AgendaFlow definiert und als fachliche Grundlage fuer Deck-Stacks und Workflows dokumentiert.
+- MVP-Kategorien und Pflichtfelder fuer Agenda-Karten definiert und als Grundlage fuer Deck-Design und Mail->Deck-Mapping dokumentiert.
+- MVP-Rollen und Rechte fuer Outlook `__Agenda`, Microsoft Graph, Deck und `agenda-n8n` definiert und als Betriebsgrundlage fuer den MVP dokumentiert.
+- Konkretes Deck-Board-Design fuer Board `1919` festgelegt: Ziel-Stacks, Label-Strategie und standardisierte Kartenstruktur fuer den MVP definiert.
+- Das reale Sciebo-Deck-Board `1919` auf die MVP-Struktur umgestellt: Board-Titel angepasst, Status-Stacks angelegt und Kategorien-Labels erzeugt.
+- Das konkrete Mapping von Outlook-Mails aus `__Agenda` auf Deck-Karten im Board `1919` einschliesslich Stack-, Label- und Beschreibungsregeln definiert.
+- Die reale MVP-Abgrenzung gegenueber dem urspruenglichen PRD geschaerft; als Kern bleibt jetzt der End-to-End-Import von `__Agenda` nach Deck.
+- Der Kernworkflow `mail-to-agenda` fuer den MVP als konkrete n8n-Spezifikation mit Trigger, Node-Folge, API-Reihenfolge und Fehlerverhalten beschrieben.
+- Die Workflow-Regeln fuer Dubletten, problematische Mails sowie Logging und bewusste Nicht-Nutzung automatischer Rueckmeldungen im MVP festgelegt.
+- Der Workflow `workflow-mail-to-agenda` real gebaut, in `agenda-n8n` deployed und erfolgreich gegen Outlook `__Agenda` und Deck getestet; der erste End-to-End-Import erzeugte Karte `8588`.
+- Der Wochenagenda-Workflow fuer die Freitagssitzung spezifiziert: Quelle ist ausschliesslich der Stack `Freitagsagenda`, Ausgabe eine strukturierte Markdown-Agenda mit Warnhinweisen.
+- Das Sitzungsnotiz-Schema fuer Besprechungsergebnisse und die ToDo-Ableitung an derselben Deck-Karte fuer den MVP festgelegt.
+- Die Workflows `workflow-erinnerungen-vorbereitung` und `workflow-reagenda-offene-punkte` real gebaut, in `agenda-n8n` deployed und gegen das reale Sciebo-Board validiert.
+- Fuer Reminder und Re-Agenda den belastbaren Lesepfad `GET /boards/1919/stacks` nachgewiesen; Collection-Card-GET bleibt in dieser Instanz unbrauchbar.
+- Den realen Deck-Befund dokumentiert, dass Cross-Stack-Reorder zwar `200` liefert, Karten aber nicht bewegt; Re-Agenda nutzt daher bewusst `copy -> relabel -> delete`.
+- Testdrehbuch, Datenschutz-/Logging-Dokument, Runbook und README auf den realen MVP-Stand nachgezogen.
+- Morgenkonsolidierung nach der Nachtsession abgeschlossen: lokale MVP-Konfiguration ohne Blocker-Platzhalter nachgezogen, Re-Smoke gegen Graph/Deck/n8n dokumentiert und Folgearbeit fuer die Produktivhaertung priorisiert.

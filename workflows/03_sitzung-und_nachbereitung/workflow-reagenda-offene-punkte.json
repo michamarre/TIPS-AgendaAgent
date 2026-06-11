@@ -1,1 +1,445 @@
-{}
+{
+  "name": "workflow-reagenda-offene-punkte",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 240],
+      "parameters": {}
+    },
+    {
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 420],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set-config",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 330],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst today = now.toISOString().slice(0, 10);\nreturn [{\n  json: {\n    board_id: Number($env.NEXTCLOUD_DECK_BOARD_ID || 1919),\n    source_stack_id: 5693,\n    target_stack_vorbereitung: 5684,\n    target_stack_freitagsagenda: 5687,\n    label_ids: {\n      review: 7898,\n      action_required: 7901,\n      information: 7907,\n      diskussion: 7910,\n      beschluss: 7913,\n      sonstiges: 7916\n    },\n    today,\n    generated_at: now.toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "read-board-stacks",
+      "name": "Read Board Stacks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [760, 330],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $node['Set Config'].json.board_id + '/stacks' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "select-reagenda-candidates",
+      "name": "Select Reagenda Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 330],
+      "parameters": {
+        "jsCode": "const cfg = $('Set Config').first().json;\nconst stacks = $input.all().map((item) => item.json || {});\nconst sourceStack = stacks.find((stack) => Number(stack.id || 0) === Number(cfg.source_stack_id));\nfunction parseDateOnly(value) {\n  const text = String(value || '').trim();\n  if (!text) return '';\n  const match = text.match(/\\d{4}-\\d{2}-\\d{2}/);\n  return match ? match[0] : '';\n}\nfunction extractField(description, fieldName) {\n  const regex = new RegExp('^' + fieldName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\s*:\\\\s*(.*)$', 'mi');\n  const match = String(description || '').match(regex);\n  return match ? String(match[1] || '').trim() : '';\n}\nfunction replaceField(description, fieldName, newValue) {\n  const regex = new RegExp('^' + fieldName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\s*:\\\\s*.*$', 'mi');\n  if (regex.test(description)) return description.replace(regex, `${fieldName}: ${newValue}`);\n  return description + `\\n${fieldName}: ${newValue}`;\n}\nfunction parseTodos(description) {\n  const lines = String(description || '').split(/\\r?\\n/);\n  const todos = [];\n  let current = null;\n  let inTodoBlock = false;\n  for (const rawLine of lines) {\n    const trimmed = rawLine.trim();\n    if (trimmed === 'ToDos') {\n      inTodoBlock = true;\n      continue;\n    }\n    if (!inTodoBlock) continue;\n    const startMatch = trimmed.match(/^\\d+\\.\\s+Aufgabe:\\s*(.+)$/i);\n    if (startMatch) {\n      if (current) todos.push(current);\n      current = { summary: String(startMatch[1] || '').trim(), owner: '', due_date: '', status: '' };\n      continue;\n    }\n    if (!current) {\n      if (/^(Technik|Sitzungsnotiz)\\s*$/i.test(trimmed)) break;\n      continue;\n    }\n    const ownerMatch = trimmed.match(/^Verantwortlich:\\s*(.+)$/i);\n    if (ownerMatch) { current.owner = String(ownerMatch[1] || '').trim(); continue; }\n    const dueMatch = trimmed.match(/^Frist:\\s*(.+)$/i);\n    if (dueMatch) { current.due_date = parseDateOnly(dueMatch[1]); continue; }\n    const statusMatch = trimmed.match(/^Status:\\s*(.+)$/i);\n    if (statusMatch) { current.status = String(statusMatch[1] || '').trim().toLowerCase(); continue; }\n    if (/^(Technik|Sitzungsnotiz)\\s*$/i.test(trimmed)) break;\n  }\n  if (current) todos.push(current);\n  return todos;\n}\nfunction categoryToLabelId(category) {\n  const normalized = String(category || '').trim().toLowerCase();\n  if (normalized === 'information') return cfg.label_ids.information;\n  if (normalized === 'diskussion') return cfg.label_ids.diskussion;\n  if (normalized === 'beschluss') return cfg.label_ids.beschluss;\n  return cfg.label_ids.sonstiges;\n}\nconst cards = Array.isArray(sourceStack?.cards) ? sourceStack.cards : [];\nconst candidates = [];\nfor (const card of cards) {\n  const description = String(card.description || '');\n  const todos = parseTodos(description);\n  const dueTodos = todos.filter((todo) => todo.due_date && String(todo.status || '').trim() !== 'erledigt' && todo.due_date <= cfg.today);\n  const followupDate = parseDateOnly(extractField(description, 'Wiedervorlage/Frist'));\n  const targetStatusRaw = extractField(description, 'Naechster Zielstatus');\n  const wantsFriday = /freitagsagenda/i.test(targetStatusRaw);\n  const isDueByFollowup = !!(followupDate && followupDate <= cfg.today);\n  if (!dueTodos.length && !isDueByFollowup) continue;\n  const targetStackId = wantsFriday ? cfg.target_stack_freitagsagenda : cfg.target_stack_vorbereitung;\n  const targetStatus = wantsFriday ? 'Freitagsagenda' : 'Vorbereitung';\n  const updatedDescription = [\n    replaceField(description, 'Status', targetStatus),\n    '',\n    'Automation',\n    `reagenda_from_card_id: ${card.id}`,\n    `reagenda_at: ${cfg.generated_at}`,\n    `reagenda_reason: ${dueTodos.length ? 'todo_due' : 'followup_due'}`\n  ].join('\\n').replace(/\\n{3,}/g, '\\n\\n');\n  const labels = Array.isArray(card.labels) ? card.labels : [];\n  const hasReview = labels.some((label) => Number(label.id || 0) === cfg.label_ids.review);\n  candidates.push({\n    source_card_id: Number(card.id || 0),\n    source_stack_id: Number(cfg.source_stack_id),\n    target_stack_id: targetStackId,\n    target_status: targetStatus,\n    title: String(card.title || '').trim() || 'Ohne Titel',\n    description: updatedDescription,\n    category: extractField(description, 'Kategorie') || 'Sonstiges',\n    category_label_id: categoryToLabelId(extractField(description, 'Kategorie') || 'Sonstiges'),\n    preserve_review_label: hasReview,\n    due_todos: dueTodos,\n    followup_date: followupDate,\n    source_labels: labels.map((label) => ({ id: Number(label.id || 0), title: String(label.title || '').trim() }))\n  });\n}\nreturn candidates.map((candidate) => ({ json: candidate }));"
+      }
+    },
+    {
+      "id": "split-candidates",
+      "name": "Split Candidates",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1280, 330],
+      "parameters": {
+        "batchSize": 1
+      }
+    },
+    {
+      "id": "create-target-card",
+      "name": "Create Target Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1540, 330],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $env.NEXTCLOUD_DECK_BOARD_ID + '/stacks/' + $json.target_stack_id + '/cards' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ title: $json.title, description: $json.description, type: 'plain' }) }}",
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "combine-created-context",
+      "name": "Combine Created Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 330],
+      "parameters": {
+        "jsCode": "const created = $input.first().json || {};\nconst original = $('Split Candidates').item.json || {};\nreturn [{ json: { ...original, target_card_id: Number(created.id || 0) } }];"
+      }
+    },
+    {
+      "id": "assign-category-label",
+      "name": "Assign Category Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2060, 330],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $env.NEXTCLOUD_DECK_BOARD_ID + '/stacks/' + $json.target_stack_id + '/cards/' + $json.target_card_id + '/assignLabel' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ labelId: $json.category_label_id }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "after-category-label",
+      "name": "After Category Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 330],
+      "parameters": {
+        "jsCode": "const item = $('Combine Created Context').item.json || {};\nreturn [{ json: { ...item } }];"
+      }
+    },
+    {
+      "id": "preserve-review-label",
+      "name": "Preserve Review Label?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2580, 330],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-review-label",
+              "leftValue": "={{ $json.preserve_review_label }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "assign-review-label",
+      "name": "Assign Review Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2840, 430],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $env.NEXTCLOUD_DECK_BOARD_ID + '/stacks/' + $json.target_stack_id + '/cards/' + $json.target_card_id + '/assignLabel' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ labelId: 7898 }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "after-review-label",
+      "name": "After Review Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 430],
+      "parameters": {
+        "jsCode": "const item = $('After Category Label').item.json || {};\nreturn [{ json: { ...item } }];"
+      }
+    },
+    {
+      "id": "assign-action-label",
+      "name": "Assign Action Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3100, 330],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $env.NEXTCLOUD_DECK_BOARD_ID + '/stacks/' + $json.target_stack_id + '/cards/' + $json.target_card_id + '/assignLabel' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ labelId: 7901 }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "after-action-label",
+      "name": "After Action Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 330],
+      "parameters": {
+        "jsCode": "const item = $('After Category Label').item.json || {};\nreturn [{ json: { ...item } }];"
+      }
+    },
+    {
+      "id": "delete-source-card",
+      "name": "Delete Source Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3620, 330],
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $env.NEXTCLOUD_DECK_BOARD_ID + '/stacks/' + $json.source_stack_id + '/cards/' + $json.source_card_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "after-delete-source",
+      "name": "After Delete Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3880, 330],
+      "parameters": {
+        "jsCode": "const item = $('After Category Label').item.json || {};\nreturn [{ json: { ...item } }];"
+      }
+    },
+    {
+      "id": "build-reagenda-result",
+      "name": "Build Reagenda Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4140, 330],
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nreturn [{\n  json: {\n    result: 'reagenda_recreated',\n    source_card_id: item.source_card_id,\n    target_card_id: item.target_card_id,\n    target_stack_id: item.target_stack_id,\n    target_status: item.target_status,\n    title: item.title,\n    followup_date: item.followup_date,\n    due_todo_count: Array.isArray(item.due_todos) ? item.due_todos.length : 0\n  }\n}];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Schedule Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Set Config": {
+      "main": [[{ "node": "Read Board Stacks", "type": "main", "index": 0 }]]
+    },
+    "Read Board Stacks": {
+      "main": [[{ "node": "Select Reagenda Candidates", "type": "main", "index": 0 }]]
+    },
+    "Select Reagenda Candidates": {
+      "main": [[{ "node": "Split Candidates", "type": "main", "index": 0 }]]
+    },
+    "Split Candidates": {
+      "main": [
+        [],
+        [{ "node": "Create Target Card", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Target Card": {
+      "main": [[{ "node": "Combine Created Context", "type": "main", "index": 0 }]]
+    },
+    "Combine Created Context": {
+      "main": [[{ "node": "Assign Category Label", "type": "main", "index": 0 }]]
+    },
+    "Assign Category Label": {
+      "main": [[{ "node": "After Category Label", "type": "main", "index": 0 }]]
+    },
+    "After Category Label": {
+      "main": [[{ "node": "Preserve Review Label?", "type": "main", "index": 0 }]]
+    },
+    "Preserve Review Label?": {
+      "main": [
+        [{ "node": "Assign Action Label", "type": "main", "index": 0 }],
+        [{ "node": "Assign Review Label", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assign Review Label": {
+      "main": [[{ "node": "After Review Label", "type": "main", "index": 0 }]]
+    },
+    "After Review Label": {
+      "main": [[{ "node": "Assign Action Label", "type": "main", "index": 0 }]]
+    },
+    "Assign Action Label": {
+      "main": [[{ "node": "After Action Label", "type": "main", "index": 0 }]]
+    },
+    "After Action Label": {
+      "main": [[{ "node": "Delete Source Card", "type": "main", "index": 0 }]]
+    },
+    "Delete Source Card": {
+      "main": [[{ "node": "After Delete Source", "type": "main", "index": 0 }]]
+    },
+    "After Delete Source": {
+      "main": [[{ "node": "Build Reagenda Result", "type": "main", "index": 0 }]]
+    },
+    "Build Reagenda Result": {
+      "main": [[{ "node": "Split Candidates", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Berlin",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "p4-05-reagenda-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

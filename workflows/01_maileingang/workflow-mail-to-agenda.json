@@ -1,1 +1,512 @@
-{}
+{
+  "name": "workflow-mail-to-agenda",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 240],
+      "parameters": {}
+    },
+    {
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 420],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set-config",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 330],
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    mailbox_user: String($env.AGENDA_OUTLOOK_USER || 'marre.michael@lfm-fh-swf.de').trim(),\n    agenda_folder_id: String($env.AGENDA_OUTLOOK_FOLDER_ID || 'AAMkADM3ZDhmZDc1LTIwYmQtNDlmZS1hMWE2LWI5OTAxYTlkZWIxMAAuAAAAAAAkH0jcZmphQ4D6jBE3b4iQAQA4d7TUfWQcRJjaCy_7yagjAAX0HNZOAAA=').trim(),\n    board_id: Number($env.NEXTCLOUD_DECK_BOARD_ID || 1919),\n    stack_id_eingang: 5678,\n    label_review: 7898,\n    poll_top: Math.max(1, Math.min(50, Number($env.AGENDA_POLL_TOP || 20))),\n    source_system: 'outlook_agenda_folder'\n  }\n}];"
+      }
+    },
+    {
+      "id": "graph-token",
+      "name": "Graph Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [760, 330],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://login.microsoftonline.com/' + $env.AZURE_TENANT_ID + '/oauth2/v2.0/token' }}",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $env.AZURE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $env.AZURE_CLIENT_SECRET }}"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "fetch-agenda-messages",
+      "name": "Fetch Agenda Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1020, 330],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent($node['Set Config'].json.mailbox_user) + '/mailFolders/' + encodeURIComponent($node['Set Config'].json.agenda_folder_id) + '/messages?$top=' + $node['Set Config'].json.poll_top + '&$orderby=' + encodeURIComponent('receivedDateTime desc') + '&$select=' + encodeURIComponent('id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,hasAttachments,isRead') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $node['Graph Token'].json.access_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "ignoreResponseCode": false
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "normalize-graph-response",
+      "name": "Normalize Graph Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 330],
+      "parameters": {
+        "jsCode": "const cfg = $('Set Config').first().json;\nconst payload = $input.first().json || {};\nconst messages = Array.isArray(payload.value) ? payload.value : [];\nreturn messages.map((message) => ({ json: { ...message, __config: cfg } }));"
+      }
+    },
+    {
+      "id": "split-messages",
+      "name": "Split Messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1540, 330],
+      "parameters": {
+        "batchSize": 1
+      }
+    },
+    {
+      "id": "validate-normalize",
+      "name": "Validate and Normalize Mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 330],
+      "parameters": {
+        "jsCode": "function stripHtml(input) {\n  return String(input || '')\n    .replace(/<\\s*br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/?p>/gi, '\\n\\n')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .replace(/[ \\t]{2,}/g, ' ')\n    .trim();\n}\nfunction chooseCategory(subject) {\n  const text = String(subject || '').toLowerCase();\n  if (text.includes('beschluss')) return { category: 'Beschluss', labelId: 7913 };\n  if (text.includes('diskussion')) return { category: 'Diskussion', labelId: 7910 };\n  if (text.includes('info') || text.includes('information')) return { category: 'Information', labelId: 7907 };\n  return { category: 'Sonstiges', labelId: 7916 };\n}\nconst mail = $input.first().json || {};\nconst cfg = mail.__config || {};\nconst sourceMessageId = String(mail.id || '').trim();\nconst receivedDate = String(mail.receivedDateTime || '').trim();\nconst subject = String(mail.subject || '').trim();\nconst bodyPreview = String(mail.bodyPreview || '').trim();\nconst bodyText = stripHtml(mail.body?.content || '');\nconst shortContext = bodyPreview || bodyText || 'Kein Textinhalt verfuegbar';\nconst title = subject || 'Ohne Betreff';\nconst categoryResult = chooseCategory(subject);\nconst submitterEmail = String(mail.from?.emailAddress?.address || '').trim() || 'unbekannt';\nconst submitterName = String(mail.from?.emailAddress?.name || '').trim() || submitterEmail;\nconst reviewRequired = !subject || submitterEmail === 'unbekannt' || shortContext === 'Kein Textinhalt verfuegbar';\nconst importedAt = new Date().toISOString();\nconst invalidHard = !sourceMessageId || !receivedDate;\nconst internetMessageId = String(mail.internetMessageId || '').trim();\nconst description = [\n  'Kurzkontext',\n  shortContext,\n  '',\n  `Kategorie: ${categoryResult.category}`,\n  'Status: Eingang',\n  `Einreicher: ${submitterName}`,\n  `E-Mail: ${submitterEmail}`,\n  `Eingang: ${receivedDate}`,\n  'Gewuenschter Termin: ',\n  'Vorbereitung: ',\n  'Wiedervorlage/Frist: ',\n  `Anhaenge vorhanden: ${mail.hasAttachments ? 'ja' : 'nein'}`,\n  `Internet-Message-ID: ${internetMessageId}`,\n  '',\n  'Technik',\n  `source_system: ${cfg.source_system || 'outlook_agenda_folder'}`,\n  `source_message_id: ${sourceMessageId}`,\n  `source_folder_id: ${cfg.agenda_folder_id || ''}`,\n  `imported_at: ${importedAt}`,\n  reviewRequired ? 'review_required: true' : 'review_required: false'\n].join('\\n');\nreturn [{\n  json: {\n    source_system: cfg.source_system || 'outlook_agenda_folder',\n    source_message_id: sourceMessageId,\n    source_folder_id: cfg.agenda_folder_id || '',\n    internet_message_id: internetMessageId,\n    title,\n    card_description: description,\n    submitter_name: submitterName,\n    submitter_email: submitterEmail,\n    received_date: receivedDate,\n    category: categoryResult.category,\n    label_id: categoryResult.labelId,\n    stack_id: Number(cfg.stack_id_eingang || 5678),\n    board_id: Number(cfg.board_id || 1919),\n    review_label_id: Number(cfg.label_review || 7898),\n    imported_at: importedAt,\n    has_attachments: Boolean(mail.hasAttachments),\n    review_required: reviewRequired,\n    invalid_hard: invalidHard\n  }\n}];"
+      }
+    },
+    {
+      "id": "hard-invalid",
+      "name": "Hard Invalid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2060, 330],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "invalid-hard",
+              "leftValue": "={{ $json.invalid_hard }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "check-duplicate",
+      "name": "Check Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 420],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst item = $input.first().json || {};\nconst processed = staticData.agendaProcessedMessageIds || {};\nconst key = String(item.source_message_id || '').trim();\nconst alreadyProcessedAt = key ? String(processed[key] || '').trim() : '';\nreturn [{ json: { ...item, duplicate_result: alreadyProcessedAt ? 'duplicate_skip' : 'import_new', duplicate_known_at: alreadyProcessedAt } }];"
+      }
+    },
+    {
+      "id": "duplicate",
+      "name": "Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2580, 420],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "duplicate-skip",
+              "leftValue": "={{ $json.duplicate_result }}",
+              "rightValue": "duplicate_skip",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "create-deck-card",
+      "name": "Create Deck Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2840, 520],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $json.board_id + '/stacks/' + $json.stack_id + '/cards' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ title: $json.title, description: $json.card_description, type: 'plain' }) }}",
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "combine-card-context",
+      "name": "Combine Card Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 520],
+      "parameters": {
+        "jsCode": "const created = $input.first().json || {};\nconst original = $('Validate and Normalize Mail').item.json || {};\nreturn [{ json: { ...original, deck_card_id: created.id, deck_stack_id: original.stack_id } }];"
+      }
+    },
+    {
+      "id": "assign-category-label",
+      "name": "Assign Category Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3360, 520],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $json.board_id + '/stacks/' + $json.stack_id + '/cards/' + $json.deck_card_id + '/assignLabel' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ labelId: $json.label_id }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "after-category-label",
+      "name": "After Category Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3620, 520],
+      "parameters": {
+        "jsCode": "const item = $('Combine Card Context').item.json || {};\nreturn [{ json: { ...item, deck_label_ids: [item.label_id] } }];"
+      }
+    },
+    {
+      "id": "needs-review",
+      "name": "Needs Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3880, 520],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "needs-review",
+              "leftValue": "={{ $json.review_required }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "assign-review-label",
+      "name": "Assign Review Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [4140, 620],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $env.NEXTCLOUD_BASE_URL.replace(/\\/$/, '') + '/index.php/apps/deck/api/v1.0/boards/' + $json.board_id + '/stacks/' + $json.stack_id + '/cards/' + $json.deck_card_id + '/assignLabel' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.NEXTCLOUD_BASIC_AUTH }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "OCS-APIRequest",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ labelId: $json.review_label_id }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "after-review-label",
+      "name": "After Review Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4400, 620],
+      "parameters": {
+        "jsCode": "const item = $('After Category Label').item.json || {};\nreturn [{ json: { ...item, deck_label_ids: [item.label_id, item.review_label_id], result: 'success_with_review_flag' } }];"
+      }
+    },
+    {
+      "id": "remember-processed",
+      "name": "Remember Processed Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4660, 520],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst processed = staticData.agendaProcessedMessageIds || {};\nconst item = $input.first().json || {};\nif (item.source_message_id) {\n  processed[String(item.source_message_id)] = item.imported_at || new Date().toISOString();\n}\nstaticData.agendaProcessedMessageIds = processed;\nreturn [{ json: item }];"
+      }
+    },
+    {
+      "id": "build-success-result",
+      "name": "Build Success Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4920, 520],
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nreturn [{ json: { result: item.result || 'success_clean', graph_message_id: item.source_message_id, internet_message_id: item.internet_message_id || '', deck_card_id: item.deck_card_id, deck_stack_id: item.deck_stack_id, deck_label_ids: item.deck_label_ids || [], imported_at: item.imported_at, title: item.title, category: item.category } }];"
+      }
+    },
+    {
+      "id": "build-duplicate-result",
+      "name": "Build Duplicate Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2840, 240],
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nreturn [{ json: { result: 'duplicate_skip', graph_message_id: item.source_message_id, internet_message_id: item.internet_message_id || '', duplicate_known_at: item.duplicate_known_at || '', imported_at: item.imported_at, title: item.title, category: item.category } }];"
+      }
+    },
+    {
+      "id": "build-invalid-result",
+      "name": "Build Invalid Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 180],
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nreturn [{ json: { result: 'error_invalid_message', graph_message_id: item.source_message_id || '', internet_message_id: item.internet_message_id || '', error_message: 'Pflichtfelder source_message_id oder receivedDateTime fehlen', imported_at: item.imported_at || new Date().toISOString(), title: item.title || 'Ohne Betreff' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Schedule Trigger": {
+      "main": [[{ "node": "Set Config", "type": "main", "index": 0 }]]
+    },
+    "Set Config": {
+      "main": [[{ "node": "Graph Token", "type": "main", "index": 0 }]]
+    },
+    "Graph Token": {
+      "main": [[{ "node": "Fetch Agenda Messages", "type": "main", "index": 0 }]]
+    },
+    "Fetch Agenda Messages": {
+      "main": [[{ "node": "Normalize Graph Response", "type": "main", "index": 0 }]]
+    },
+    "Normalize Graph Response": {
+      "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]]
+    },
+    "Split Messages": {
+      "main": [
+        [],
+        [{ "node": "Validate and Normalize Mail", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate and Normalize Mail": {
+      "main": [[{ "node": "Hard Invalid?", "type": "main", "index": 0 }]]
+    },
+    "Hard Invalid?": {
+      "main": [
+        [{ "node": "Build Invalid Result", "type": "main", "index": 0 }],
+        [{ "node": "Check Duplicate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Duplicate": {
+      "main": [[{ "node": "Duplicate?", "type": "main", "index": 0 }]]
+    },
+    "Duplicate?": {
+      "main": [
+        [{ "node": "Build Duplicate Result", "type": "main", "index": 0 }],
+        [{ "node": "Create Deck Card", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Deck Card": {
+      "main": [[{ "node": "Combine Card Context", "type": "main", "index": 0 }]]
+    },
+    "Combine Card Context": {
+      "main": [[{ "node": "Assign Category Label", "type": "main", "index": 0 }]]
+    },
+    "Assign Category Label": {
+      "main": [[{ "node": "After Category Label", "type": "main", "index": 0 }]]
+    },
+    "After Category Label": {
+      "main": [[{ "node": "Needs Review?", "type": "main", "index": 0 }]]
+    },
+    "Needs Review?": {
+      "main": [
+        [{ "node": "Remember Processed Message", "type": "main", "index": 0 }],
+        [{ "node": "Assign Review Label", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assign Review Label": {
+      "main": [[{ "node": "After Review Label", "type": "main", "index": 0 }]]
+    },
+    "After Review Label": {
+      "main": [[{ "node": "Remember Processed Message", "type": "main", "index": 0 }]]
+    },
+    "Remember Processed Message": {
+      "main": [[{ "node": "Build Success Result", "type": "main", "index": 0 }]]
+    },
+    "Build Success Result": {
+      "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]]
+    },
+    "Build Duplicate Result": {
+      "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]]
+    },
+    "Build Invalid Result": {
+      "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "timezone": "Europe/Berlin",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "active": false,
+  "pinData": {},
+  "versionId": "p3-05-mail-to-agenda-http",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

@@ -21,3 +21,21 @@
 **Datum:** 2026-06-10
 **Entscheidung:** n8n uebernimmt Trigger, Parsing, Benachrichtigungen und Nachverfolgung; Deck bleibt das kanonische Arbeitsboard.
 **Begruendung:** Damit bleiben Automatisierung und operative Bearbeitung sauber getrennt.
+
+## D-004: MVP-Eingangskanal ist ein Outlook-Ordner `__Agenda`
+**Status:** Aktiv
+**Datum:** 2026-06-10
+**Entscheidung:** Fuer den MVP wird kein eigenes Agenda-Postfach vorausgesetzt. Stattdessen werden Mails im persoenlichen Outlook-Postfach ueber eine Betreffkonvention wie `[Agenda]` und eine Outlook-Regel in den Ordner `__Agenda` verschoben. Nur dieser Ordner wird spaeter automatisiert ausgelesen.
+**Begruendung:** Es existiert aktuell kein echtes Agenda-Postfach. Die `__Agenda`-Loesung ermoeglicht dennoch einen sofort nutzbaren, mailbasierten Eingangskanal ohne make.com-Zwischenschicht.
+
+## D-005: Nicht-MVP-Mailboxwerte blockieren den Outlook-Ordner-MVP nicht
+**Status:** Aktiv
+**Datum:** 2026-06-11
+**Entscheidung:** Solange AgendaFlow im MVP ueber Outlook `__Agenda` statt ueber eine eigene Agenda-Mailbox laeuft, duerfen IMAP-, SMTP- und institutionelle Mailboxwerte lokal als `MVP_DEFERRED` markiert werden.
+**Begruendung:** Diese Werte werden fuer den derzeit real betriebenen Importpfad nicht benoetigt und sollen die Produktivhaertung nicht mit einem kuenstlichen Konfigurationsblocker stoppen.
+
+## D-006: Reminder und Re-Agenda bleiben vorerst deployed, aber inaktiv
+**Status:** Aktiv
+**Datum:** 2026-06-11
+**Entscheidung:** `workflow-erinnerungen-vorbereitung` und `workflow-reagenda-offene-punkte` bleiben in `agenda-n8n` vorerst vorhanden, werden aber bis zur Betriebsfreigabe nicht automatisch aktiviert.
+**Begruendung:** Die Workflows sind technisch validiert, sollen aber erst nach bewusster Cron-, Empfaenger- und Betriebsentscheidung automatisch laufen.
