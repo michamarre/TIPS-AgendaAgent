@@ -29,3 +29,4 @@
 - Den realen Deck-Befund dokumentiert, dass Cross-Stack-Reorder zwar `200` liefert, Karten aber nicht bewegt; Re-Agenda nutzt daher bewusst `copy -> relabel -> delete`.
 - Testdrehbuch, Datenschutz-/Logging-Dokument, Runbook und README auf den realen MVP-Stand nachgezogen.
 - Morgenkonsolidierung nach der Nachtsession abgeschlossen: lokale MVP-Konfiguration ohne Blocker-Platzhalter nachgezogen, Re-Smoke gegen Graph/Deck/n8n dokumentiert und Folgearbeit fuer die Produktivhaertung priorisiert.
+- Produktivhaertung nachgezogen: API-Key-Rotation fuer das MVP-Testfenster bewusst vertagt und fuer Reminder/Re-Agenda als Betriebsstandard `eine Woche spaeter` dokumentiert.

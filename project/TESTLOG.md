@@ -100,3 +100,7 @@
 ## 2026-06-11 08:32 - P6-01 Re-Smoke Graph, Deck und agenda-n8n
 **Ergebnis:** PASS
 **Output:** Graph-Lesezugriff auf Outlook `__Agenda` erneut erfolgreich; letzte Mail `Re: Austausch WI/ FHSWF` vom `2026-06-10T14:24:19Z` lesbar. Deck-Zugriff auf Board `1919` erfolgreich; sieben Ziel-Stacks `Eingang`, `Rueckfrage`, `Vorbereitung`, `Freitagsagenda`, `Beschlossen`, `ToDo laeuft`, `Erledigt` bestaetigt. `agenda-n8n` Public API erfolgreich; drei AgendaFlow-Workflows vorhanden. `workflow-mail-to-agenda` ist `active=true` und zeigte zuletzt wiederholte Success-Executions am `2026-06-11` zwischen `05:45:00Z` und `06:30:02Z`. Reminder und Re-Agenda sind weiterhin deployed, aber `active=false`.
+
+## 2026-06-11 09:00 - P6-05 Aktivierungs- und Betriebsstrategie
+**Ergebnis:** PASS
+**Output:** Die Betriebsstrategie fuer die Folgeworkflows wurde dokumentarisch festgelegt. `workflow-mail-to-agenda` bleibt aktiv. Reminder und Re-Agenda bleiben vorerst deployed, aber nicht automatisch aktiviert. Fuer offene Punkte gilt als Standardfall die Wiedereinplanung in den naechsten regulaeren Wochenlauf, also wieder eine Woche spaeter. Die Rotation des bestehenden `agenda-n8n`-API-Keys wurde fuer das laufende MVP-Testfenster bewusst vertagt.

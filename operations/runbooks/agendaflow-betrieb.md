@@ -17,6 +17,13 @@ Dieses Runbook beschreibt den operativen Einstieg fuer TIPS AgendaFlow.
 - `workflow-erinnerungen-vorbereitung`
 - `workflow-reagenda-offene-punkte`
 
+## Aktueller Betriebsstandard
+
+- `workflow-mail-to-agenda` bleibt aktiv
+- `workflow-erinnerungen-vorbereitung` und `workflow-reagenda-offene-punkte` bleiben vorerst deployed, aber nicht automatisch aktiviert
+- offene Punkte werden im Standardfall fuer den naechsten Wochenlauf, also wieder eine Woche spaeter, eingeplant
+- API-Key-Rotation fuer `agenda-n8n` ist fuer das aktuelle MVP-Testfenster bewusst vertagt
+
 ## Regelmaessige Kontrollen
 
 ### 1. n8n-Instanz

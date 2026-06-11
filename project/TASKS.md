@@ -47,7 +47,7 @@
 
 ## Phase 6: Produktivhaertung
 - [x] P6-01 Nachtstand konsolidieren, lokale MVP-Konfiguration entblocken und Re-Smoke dokumentieren
-- [ ] P6-02 `agenda-n8n`-Credentials und API-Key haerten oder rotieren
+- [ ] P6-02 `agenda-n8n`-Credentials und API-Key haerten oder rotieren (bewusst nach MVP-Testfenster)
 - [ ] P6-03 Proxy-Route fuer `agenda-n8n` reproduzierbar absichern
 - [ ] P6-04 Institutionelle Agenda-Mailbox statt Outlook `__Agenda` vorbereiten
-- [ ] P6-05 Aktivierungs- und Betriebsstrategie fuer Reminder und Re-Agenda festlegen
+- [x] P6-05 Aktivierungs- und Betriebsstrategie fuer Reminder und Re-Agenda festlegen

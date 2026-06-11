@@ -26,6 +26,13 @@ Der Zielstack wird aus `Naechster Zielstatus` abgeleitet:
 - `Freitagsagenda` -> Zielstack `5687`
 - sonst -> Zielstack `5684` (`Vorbereitung`)
 
+## Betriebsstandard fuer den Wiedereintritt
+
+Wenn kein abweichender Termin oder Sonderfall dokumentiert ist, gilt fuer die operative Bearbeitung:
+
+- Re-Agenda bedeutet Wiedereinplanung fuer den naechsten regulaeren Wochenlauf
+- Standard ist damit `wieder eine Woche spaeter`
+
 ## Wichtige API-Grenze
 
 Die reale Sciebo-/Deck-Version ignoriert beim offiziellen Reorder-Endpunkt das Ziel-`stackId`.

@@ -73,6 +73,11 @@ Der Workflow ist bewusst:
 
 Der Reminder-Workflow erzeugt noch keine Statusaenderung.
 
+Operativer Standard fuer den aktuellen MVP:
+
+- offene Punkte werden nach einer Erinnerung grundsaetzlich fuer den naechsten Wochenlauf bewertet
+- wenn keine abweichende Fachentscheidung dokumentiert ist, ist der Standard `wieder eine Woche spaeter`
+
 Die eigentliche Re-Agenda-Entscheidung wird im separaten Workflow
 
 - [workflow-reagenda-regeln.md](workflow-reagenda-regeln.md)

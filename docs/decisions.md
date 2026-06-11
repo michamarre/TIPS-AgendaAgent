@@ -39,3 +39,15 @@
 **Datum:** 2026-06-11
 **Entscheidung:** `workflow-erinnerungen-vorbereitung` und `workflow-reagenda-offene-punkte` bleiben in `agenda-n8n` vorerst vorhanden, werden aber bis zur Betriebsfreigabe nicht automatisch aktiviert.
 **Begruendung:** Die Workflows sind technisch validiert, sollen aber erst nach bewusster Cron-, Empfaenger- und Betriebsentscheidung automatisch laufen.
+
+## D-007: API-Key-Rotation wird im MVP-Testfenster bewusst nicht vorgezogen
+**Status:** Aktiv
+**Datum:** 2026-06-11
+**Entscheidung:** Der bestehende `agenda-n8n`-API-Key und die aktuellen technischen Credentials werden fuer das laufende MVP-Testfenster vorerst nicht rotiert.
+**Begruendung:** Im aktuellen Schritt hat Stabilitaet des Testpfads hoehere Prioritaet als sofortige Credential-Rotation. Die Haertung bleibt Folgearbeit vor einer breiteren Betriebsfreigabe.
+
+## D-008: Re-Agenda-Standard ist eine Woche spaeter
+**Status:** Aktiv
+**Datum:** 2026-06-11
+**Entscheidung:** Fuer `P6-05` gilt als Standardfall, dass offene Punkte nach Reminder oder Re-Agenda fuer den naechsten Wochenzyklus wieder eine Woche spaeter eingeplant werden.
+**Begruendung:** Das entspricht dem regulaeren Sitzungsrhythmus und vermeidet zu aggressive Rueckfuehrung offener Punkte in denselben Wochenlauf.
