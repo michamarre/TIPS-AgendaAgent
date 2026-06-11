@@ -67,6 +67,21 @@ Dieses Runbook beschreibt den operativen Einstieg fuer TIPS AgendaFlow.
 - `/agenda-n8n/rest/login`
 - `/agenda-n8n/webhook-test/...`
 
+Fuer die Reproduktion und Selbstheilung des Proxy-Fix ist das versionierte Skript vorgesehen:
+
+- `operations/runbooks/ensure-agenda-n8n-proxy.sh`
+
+Serverseitiger Sollpfad:
+
+- `/home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh`
+
+Es setzt den `agenda-n8n`-Block in `proxy_host/5.conf` idempotent neu, validiert `nginx -t` im Container `portfolio-proxy` und fuehrt danach ein Reload aus. Fuer den aktuellen Betrieb ist zusaetzlich ein Cron-Self-Heal vorgesehen, damit Proxy-Host-Regenerierungen den Subpath-Fix nicht dauerhaft verlieren.
+
+Aktuell installiert:
+
+- Server-Skript: `/home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh`
+- Cron: `*/5 * * * * QUIET=1 /home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh >> /var/log/ensure-agenda-n8n-proxy.log 2>&1`
+
 ## Geheimnisse
 
 - keine Secrets im Repo

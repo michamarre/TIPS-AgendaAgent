@@ -104,3 +104,7 @@
 ## 2026-06-11 09:00 - P6-05 Aktivierungs- und Betriebsstrategie
 **Ergebnis:** PASS
 **Output:** Die Betriebsstrategie fuer die Folgeworkflows wurde dokumentarisch festgelegt. `workflow-mail-to-agenda` bleibt aktiv. Reminder und Re-Agenda bleiben vorerst deployed, aber nicht automatisch aktiviert. Fuer offene Punkte gilt als Standardfall die Wiedereinplanung in den naechsten regulaeren Wochenlauf, also wieder eine Woche spaeter. Die Rotation des bestehenden `agenda-n8n`-API-Keys wurde fuer das laufende MVP-Testfenster bewusst vertagt.
+
+## 2026-06-11 09:24 - P6-03 Proxy-Reconcile und Self-Heal fuer `agenda-n8n`
+**Ergebnis:** PASS
+**Output:** Das Skript `operations/runbooks/ensure-agenda-n8n-proxy.sh` erstellt bzw. repariert den `agenda-n8n`-Block in `proxy_host/5.conf` idempotent, validiert `nginx -t` im Container `portfolio-proxy` und fuehrt danach `nginx -s reload` aus. Auf dem VPS wurde es installiert unter `/home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh`. Backup der vorherigen Host-Datei wurde angelegt (`5.conf.20260611072206.bak`). Cron-Self-Heal ist aktiv mit `*/5 * * * * QUIET=1 /home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh >> /var/log/ensure-agenda-n8n-proxy.log 2>&1`. Oeffentliche Revalidierung erfolgreich: `GET /agenda-n8n/rest/settings -> 200`, `GET /agenda-n8n/rest/login -> 401`, `POST /agenda-n8n/webhook-test/codex-probe -> 404`.

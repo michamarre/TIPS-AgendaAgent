@@ -51,3 +51,9 @@
 **Datum:** 2026-06-11
 **Entscheidung:** Fuer `P6-05` gilt als Standardfall, dass offene Punkte nach Reminder oder Re-Agenda fuer den naechsten Wochenzyklus wieder eine Woche spaeter eingeplant werden.
 **Begruendung:** Das entspricht dem regulaeren Sitzungsrhythmus und vermeidet zu aggressive Rueckfuehrung offener Punkte in denselben Wochenlauf.
+
+## D-009: Proxy-Schutz fuer `agenda-n8n` erfolgt ueber idempotenten Reconcile-Job
+**Status:** Aktiv
+**Datum:** 2026-06-11
+**Entscheidung:** Der funktionierende `agenda-n8n`-Subpath-Block wird nicht mehr nur manuell in `proxy_host/5.conf` gepflegt, sondern ueber ein idempotentes Reconcile-Skript plus Cron-Self-Heal abgesichert.
+**Begruendung:** Nginx Proxy Manager kann generierte Host-Dateien neu schreiben. Ein versionierter Reconcile-Pfad ist in dieser Umgebung belastbarer als ein einmaliger Handedit.

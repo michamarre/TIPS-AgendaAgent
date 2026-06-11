@@ -1,12 +1,12 @@
 # Projektstatus
 
-**Letzte Aktualisierung:** 2026-06-11 09:00
+**Letzte Aktualisierung:** 2026-06-11 09:24
 **Aktuelle Phase:** Phase 6 - Produktivhaertung
 **Gesamtfortschritt:** 6 von 6 Phasen abgeschlossen
 
 ## Aktiver Task
-- **ID:** P6-05
-- **Beschreibung:** Aktivierungs- und Betriebsstrategie fuer Reminder und Re-Agenda festlegen
+- **ID:** P6-03
+- **Beschreibung:** Proxy-Route fuer `agenda-n8n` reproduzierbar absichern
 - **Status:** Abgeschlossen
 - **Blockiert durch:** -
 
@@ -18,6 +18,7 @@
 | P5-03 | Datenschutz- und Logging-Linie fuer den MVP dokumentiert | 2026-06-10 |
 | P5-02 | Runbook und Stoerungskonzept vervollstaendigt | 2026-06-10 |
 | P5-01 | Testdrehbuch und Negativtests vervollstaendigt | 2026-06-10 |
+| P6-03 | `agenda-n8n`-Proxy via Reconcile-Skript und Cron-Self-Heal reproduzierbar abgesichert | 2026-06-11 |
 | P6-05 | Aktivierungs- und Betriebsstrategie fuer Reminder und Re-Agenda festgelegt | 2026-06-11 |
 | P6-01 | Nachtstand konsolidiert, lokale MVP-Konfiguration entblockt und Re-Smoke dokumentiert | 2026-06-11 |
 | P4-05 | Re-Agenda-Regeln real gegen Deck validiert und Workaround fuer kaputtes Reorder dokumentiert | 2026-06-10 |
@@ -50,7 +51,7 @@
 - Es gibt aktuell keine echte Agenda-Mailadresse mit eigenem Postfach; der Eingangskanal laeuft weiter ueber Outlook `__Agenda`.
 - `workflow-mail-to-agenda` ist in `agenda-n8n` aktiv und laut Re-Smoke am 2026-06-11 mehrfach erfolgreich gelaufen.
 - `workflow-erinnerungen-vorbereitung` und `workflow-reagenda-offene-punkte` sind deployed und validiert, bleiben aber derzeit bewusst `inactive`.
-- Die `agenda-n8n`-Instanz haengt weiterhin an einer manuell ergaenzten Proxy-Route; diese Loesung kann bei Proxy-Neugenerierung ueberschrieben werden.
+- Die `agenda-n8n`-Instanz haengt weiter an einer Subpath-Proxy-Loesung, ist aber jetzt ueber Reconcile-Skript und Cron-Self-Heal reproduzierbar abgesichert.
 - Die Instanz nutzt weiter technische Bootstrap-Credentials bzw. den bestehenden API-Key; eine Rotation wurde fuer das laufende MVP-Testfenster bewusst vertagt.
 - Sciebo/Deck-Zugriff auf Board `1919` wurde im Re-Smoke erneut bestaetigt; belastbarer Lesepfad fuer Karten bleibt `GET /boards/{boardId}/stacks`.
 - Cross-Stack-Moves per Deck-`reorder` bleiben in dieser Instanz unzuverlaessig; produktiv ist weiterhin nur `copy -> relabel -> delete` belastbar.
@@ -58,5 +59,5 @@
 - Fuer Reminder und Re-Agenda gilt jetzt als dokumentierter Standard die Wiedereinplanung in den naechsten regulaeren Wochenlauf, also wieder eine Woche spaeter.
 
 ## Naechster Task
-- **ID:** P6-03
-- **Beschreibung:** Proxy-Route fuer `agenda-n8n` reproduzierbar absichern.
+- **ID:** P6-04
+- **Beschreibung:** Institutionelle Agenda-Mailbox statt Outlook `__Agenda` vorbereiten.

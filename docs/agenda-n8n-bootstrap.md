@@ -45,7 +45,13 @@ Der Bootstrap-Key deckt aktuell diese technischen Aufgaben ab:
 
 ## Wichtiger Betriebs-Hinweis
 
-Die `agenda-n8n`-Route im Proxy wurde manuell angepasst. Bei spaeteren Aenderungen im Nginx Proxy Manager kann diese Anpassung ueberschrieben werden. Dann muessen diese Pfade erneut geprueft werden:
+Die `agenda-n8n`-Route im Proxy war urspruenglich ein manueller Eingriff in `proxy_host/5.conf`. Seit `2026-06-11` gibt es dafuer einen reproduzierbaren Self-Heal-Pfad:
+
+- Repo-Skript: `operations/runbooks/ensure-agenda-n8n-proxy.sh`
+- Server-Skript: `/home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh`
+- Cron: `*/5 * * * * QUIET=1 /home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh >> /var/log/ensure-agenda-n8n-proxy.log 2>&1`
+
+Damit wird der funktionierende `agenda-n8n`-Block nach Proxy-Neugenerierungen automatisch wiederhergestellt. Unabhaengig davon muessen diese Pfade bei Aenderungen weiterhin geprueft werden:
 
 - `/agenda-n8n/rest/settings`
 - `/agenda-n8n/rest/login`

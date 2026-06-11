@@ -112,12 +112,15 @@ Ein HTTP-`200` auf die Basis-URL beweist nur, dass die Instanz grundsaetzlich an
 
 ## Wichtiger Betriebs-Risiko-Hinweis
 
-Die Proxy-Route fuer `/agenda-n8n` wurde laut Vorabinformation direkt in die generierte Nginx-Proxy-Konfiguration eingetragen.
+Die Proxy-Route fuer `/agenda-n8n` wurde zunaechst direkt in die generierte Nginx-Proxy-Konfiguration eingetragen.
 
-Das ist funktional, aber fragil:
+Der fragilere Erstzustand wurde am `2026-06-11` gehaertet:
 
-- Sobald der betreffende Proxy-Host im Nginx Proxy Manager neu gespeichert oder neu generiert wird, kann die manuelle Aenderung verloren gehen.
-- Dann kann die Instanz ploetzlich wieder unerreichbar sein, obwohl die Container weiterlaufen.
+- das Repo enthaelt jetzt das idempotente Skript `operations/runbooks/ensure-agenda-n8n-proxy.sh`
+- auf dem VPS ist es installiert unter `/home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh`
+- ein Cron-Self-Heal prueft und reapplied den Block alle 5 Minuten
+
+Damit bleibt das Restrisiko einer Proxy-Neugenerierung vorhanden, ist aber nicht mehr auf einen einmaligen manuellen Eingriff ohne Wiederherstellungspfad reduziert.
 
 ## Bewertung
 
@@ -197,9 +200,23 @@ Sobald der Bootstrap verifiziert ist, muessen in `config/placeholders.env` minde
 - `N8N_API_KEY`
 - optional abweichende SSH-/Host-Informationen, falls nicht identisch mit dem bestehenden VPS-Setup
 
+## Neuer Ist-Stand vom 2026-06-11 vormittags
+
+Die Proxy-Absicherung fuer `agenda-n8n` ist jetzt reproduzierbar:
+
+- der funktionierende `agenda-n8n`-Block steht als Managed Block in `proxy_host/5.conf`
+- Backup der vorherigen Host-Datei wurde angelegt, z. B. `5.conf.20260611072206.bak`
+- `nginx -t` und `nginx -s reload` im Container `portfolio-proxy` liefen erfolgreich
+- oeffentliche Revalidierung:
+  - `GET /agenda-n8n/rest/settings` -> `200`
+  - `GET /agenda-n8n/rest/login` -> `401`
+  - `POST /agenda-n8n/webhook-test/codex-probe` -> `404`
+- Cron-Self-Heal ist aktiv:
+  - `*/5 * * * * QUIET=1 /home/deploy/portfolio_V3/scripts/ensure-agenda-n8n-proxy.sh >> /var/log/ensure-agenda-n8n-proxy.log 2>&1`
+
 ## Empfehlung
 
-Wenn die Instanz dauerhaft fuer AgendaFlow bleiben soll, ist mittelfristig eine saubere Proxy-Verwaltung besser als eine manuelle Subpath-Ergaenzung.
+Wenn die Instanz dauerhaft fuer AgendaFlow bleiben soll, ist mittelfristig eine saubere Proxy-Verwaltung oder eigene Subdomain weiterhin besser als eine Subpath-Loesung. Fuer den aktuellen MVP ist der Reconcile- und Cron-Pfad aber jetzt belastbar genug, um Host-Datei-Regenerierungen reproduzierbar abzufangen.
 
 Bevor wir Workflows bauen, brauchen wir zuerst einen reproduzierbaren Nachweis fuer:
 

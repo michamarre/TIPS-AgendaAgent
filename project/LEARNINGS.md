@@ -5,7 +5,7 @@ Dieses Dokument wird vom Agenten automatisch gepflegt.
 VOR JEDEM CODING-TASK ZUERST LESEN.
 Nach jedem Fehler sofort ergaenzen, nicht erst am Ende der Session.
 
-Eintraege: 10
+Eintraege: 13
 Letzte Aktualisierung: 2026-06-11
 
 ## L-001: Encoding-Probleme sofort mit UTF-8 normalisieren
@@ -247,3 +247,75 @@ Git-Befehle in PowerShell mit `;` sequenziell ausfuehren oder als getrennte Komm
 
 **Merksatz:**
 In dieser Umgebung Bash-Gewohnheiten ablegen und PowerShell-Syntax erzwingen.
+
+## L-011: Fuer VPS-Zugriffe zuerst die bestehende SSH-Config auswerten
+
+**Status:** Bewaehrt
+**Aufgetreten in:** Task P6-03, 2026-06-11
+**Technologie:** PowerShell / SSH
+
+**Gescheiterter Weg:**
+Den SSH-Key-Pfad aus `config/placeholders.env` relativ zu `$HOME\\.ssh` ableiten.
+
+**Fehler / Symptom:**
+Der lokale Test findet den Key nicht, obwohl SSH-Zugriff grundsaetzlich eingerichtet ist.
+
+**Ursache:**
+Die reale SSH-Konfiguration zeigt auf einen abweichenden zentralen Key-Pfad (`C:/ssh-keys/deploy_agent`) und nicht auf `$HOME\\.ssh`.
+
+**Recherche:**
+Abgleich mit der vorhandenen Datei `$HOME\\.ssh\\config`.
+
+**Funktionierende Loesung:**
+Bei bestehenden VPS-Setups zuerst die lokale SSH-Config lesen und bevorzugt ueber den konfigurierten Host-Alias verbinden.
+
+**Merksatz:**
+Nicht gegen die vorhandene SSH-Config arbeiten; sie ist die kanonische Verbindungsvorgabe.
+
+## L-012: Crontab-Deduplizierung ueber SSH ohne `$0`-Expansion formulieren
+
+**Status:** Bewaehrt
+**Aufgetreten in:** Task P6-03, 2026-06-11
+**Technologie:** PowerShell / SSH / Cron
+
+**Gescheiterter Weg:**
+Einen per SSH uebergebenen `awk '!seen[$0]++'`-Ausdruck ohne ausreichende Abschirmung gegen lokale Shell-Expansion senden.
+
+**Fehler / Symptom:**
+Der Remote-Aufruf bricht mit einem `awk`-Syntaxfehler auf `seen[]++` ab.
+
+**Ursache:**
+Das `$0` wurde vor dem eigentlichen `awk`-Lauf durch die aufrufende Shell veraendert oder entfernt.
+
+**Recherche:**
+Direkte Reproduktion beim ersten Versuch, einen deduplizierten Cron-Eintrag remote zu setzen.
+
+**Funktionierende Loesung:**
+Remote-Kommandos fuer Cron moeglichst ohne `awk`-`$0` formulieren oder den Eintrag mit `grep -Fqx` pruefen und nur bei Bedarf anhaengen.
+
+**Merksatz:**
+Bei SSH-One-Linern mit `awk` ist `$0` ein Quoting-Risiko; lieber positiv mit `grep` auf den Zielstring pruefen.
+
+## L-013: Remote-Shell-Konstrukte wie `$(mktemp)` ueber SSH komplett an die Ziel-Shell delegieren
+
+**Status:** Bewaehrt
+**Aufgetreten in:** Task P6-03, 2026-06-11
+**Technologie:** PowerShell / SSH / Bash
+
+**Gescheiterter Weg:**
+Einen Remote-Cron-Block mit `$(mktemp)` und Shell-Operatoren in PowerShell so quoten, dass Teile davon lokal expandiert werden.
+
+**Fehler / Symptom:**
+`mktemp` wird scheinbar lokal gesucht oder der uebergebene Bash-Block bricht mit Syntaxfehlern ab.
+
+**Ursache:**
+Die lokale Shell wertet Teile des Remote-Kommandos aus, bevor `ssh` sie an Bash auf dem Zielhost uebergibt.
+
+**Recherche:**
+Direkter Fehlversuch bei der ersten Cron-Installation fuer den Proxy-Self-Heal.
+
+**Funktionierende Loesung:**
+Komplexe Remote-Kommandos als vollstaendige, einfach gequotete Bash-Strings an `ssh` uebergeben oder explizit `bash -lc '...'` auf dem Zielhost verwenden.
+
+**Merksatz:**
+Bei SSH gilt: erst sicherstellen, dass die richtige Shell den Ausdruck auswertet, dann an `mktemp`, Pipes oder `||` denken.
